@@ -55,8 +55,11 @@ module vip_score::vip_score {
     /// The stage is already finalized.
     const EFINALIZED_STAGE: u64 = 8;
 
-    // The previous stage is not finalized.
-    const EPREVIOUS_STAGE_NOT_FINALIZED: u64 = 9;
+    // Can not set initial stage to 0;
+    const ESTAGE_ZERO: u64 = 9;
+
+    // Already called set_init_stage;
+    const EALREADY_SET: u64 = 10;
     //
     // Events
     //
@@ -92,17 +95,35 @@ module vip_score::vip_score {
         move_to(
             publisher,
             ModuleStore {
-                init_stage: 1,
+                init_stage: 0,
                 deployers: simple_map::create<address, bool>(),
                 scores: table::new<u64, Scores>()
             }
         );
     }
 
-    entry public fun set_init_stage(deployer: &signer, stage: u64) acquires ModuleStore {
+    public entry fun set_init_stage(deployer: &signer, stage: u64) acquires ModuleStore {
+        assert!(stage != 0, error::invalid_argument(ESTAGE_ZERO));
         check_deployer_permission(deployer);
         let module_store = borrow_global_mut<ModuleStore>(@vip_score);
+        assert!(module_store.init_stage == 0, error::already_exists(EALREADY_SET));
         module_store.init_stage = stage;
+        create_stage(stage);
+    }
+
+        // Check deployer permission and create a stage score table if not exists.
+    fun create_stage(stage: u64) acquires ModuleStore {
+        let module_store = borrow_global_mut<ModuleStore>(@vip_score);
+    
+        table::add(
+            &mut module_store.scores,
+            stage,
+            Scores {
+                total_score: 0,
+                is_finalized: false,
+                score: table::new<address, u64>()
+            }
+        );
     }
 
     /// Check signer's permisson
@@ -129,7 +150,6 @@ module vip_score::vip_score {
         stage: u64,
         amount: u64
     ) {
-
         let score = table::borrow_mut_with_default(&mut scores.score, account, 0);
 
         scores.total_score = scores.total_score - *score + amount;
@@ -144,22 +164,6 @@ module vip_score::vip_score {
             }
         )
     }
-
-    fun check_previous_stage_finalized(
-        module_store: &ModuleStore, stage: u64
-    ) {
-        // init stage is always finalized because it is the first stage.
-        let init_stage = module_store.init_stage;
-        if (stage == init_stage) { return };
-        assert!(
-            table::contains(&module_store.scores, stage - 1)
-                && table::borrow(&module_store.scores, stage - 1).is_finalized,
-            error::invalid_argument(EPREVIOUS_STAGE_NOT_FINALIZED)
-        );
-
-        return
-    }
-
     //
     // View functions
     //
@@ -240,24 +244,6 @@ module vip_score::vip_score {
     //
     // Public functions
     //
-    // Check deployer permission and create a stage score table if not exists.
-    public fun prepare_stage(deployer: &signer, stage: u64) acquires ModuleStore {
-        check_deployer_permission(deployer);
-        let module_store = borrow_global_mut<ModuleStore>(@vip_score);
-        check_previous_stage_finalized(module_store, stage);
-
-        if (!table::contains(&module_store.scores, stage)) {
-            table::add(
-                &mut module_store.scores,
-                stage,
-                Scores {
-                    total_score: 0,
-                    is_finalized: false,
-                    score: table::new<address, u64>()
-                }
-            );
-        };
-    }
 
     /// Increase a score of an account.
     public fun increase_score(
@@ -267,7 +253,6 @@ module vip_score::vip_score {
         amount: u64
     ) acquires ModuleStore {
         check_deployer_permission(deployer);
-        prepare_stage(deployer, stage);
 
         let module_store = borrow_global_mut<ModuleStore>(@vip_score);
 
@@ -305,7 +290,6 @@ module vip_score::vip_score {
         amount: u64
     ) acquires ModuleStore {
         check_deployer_permission(deployer);
-        prepare_stage(deployer, stage);
 
         let module_store = borrow_global_mut<ModuleStore>(@vip_score);
 
@@ -384,6 +368,8 @@ module vip_score::vip_score {
         );
         scores.is_finalized = true;
 
+        create_stage(stage + 1);
+
         event::emit(FinalizedScoreEvent { stage })
 
     }
@@ -394,12 +380,11 @@ module vip_score::vip_score {
         addrs: vector<address>,
         update_scores: vector<u64>
     ) acquires ModuleStore {
+        check_deployer_permission(deployer);
         assert!(
             vector::length(&addrs) == vector::length(&update_scores),
             error::invalid_argument(ENOT_MATCH_LENGTH)
         );
-        // permission check is performed in prepare_stage
-        prepare_stage(deployer, stage);
 
         let module_store = borrow_global_mut<ModuleStore>(@vip_score);
         assert!(
@@ -470,8 +455,7 @@ module vip_score::vip_score {
         init_module_for_test();
 
         add_deployer_script(publisher, signer::address_of(deployer));
-        prepare_stage(deployer, 1);
-
+        set_init_stage(deployer, 1);
         increase_score(deployer, user, 1, 100);
         assert!(get_score(user, 1) == 100, 1);
         remove_deployer_script(publisher, signer::address_of(deployer));
@@ -485,8 +469,7 @@ module vip_score::vip_score {
     ) acquires ModuleStore {
         init_module_for_test();
         add_deployer_script(publisher, signer::address_of(deployer));
-        prepare_stage(deployer, 1);
-
+        set_init_stage(deployer, 1);
         increase_score(deployer, user, 1, 100);
         assert!(get_score(user, 1) == 100, 1);
         decrease_score(deployer, user, 1, 10000);
@@ -516,7 +499,7 @@ module vip_score::vip_score {
     fun failed_not_match_length(publisher: &signer, deployer: &signer) acquires ModuleStore {
         init_module_for_test();
         add_deployer_script(publisher, signer::address_of(deployer));
-
+        set_init_stage(deployer, 1);
         update_score_script(deployer, 1, vector[@0x123, @0x234], vector[]);
     }
 
@@ -527,8 +510,7 @@ module vip_score::vip_score {
     ) acquires ModuleStore {
         init_module_for_test();
         add_deployer_script(publisher, signer::address_of(deployer));
-        prepare_stage(deployer, 1);
-
+        set_init_stage(deployer, 1);
         increase_score(deployer, user, 1, 100);
         assert!(get_score(user, 1) == 100, 1);
         finalize_script(deployer, 1);
@@ -555,9 +537,7 @@ module vip_score::vip_score {
 
         add_deployer_script(publisher, signer::address_of(deployer_a));
         add_deployer_script(publisher, signer::address_of(deployer_b));
-
-        prepare_stage(deployer_a, 1);
-
+        set_init_stage(deployer_a, 1);
         // increase score by deployer_a
         increase_score(deployer_a, user_a, 1, 100);
         increase_score(deployer_a, user_b, 1, 50);
@@ -603,6 +583,7 @@ module vip_score::vip_score {
         init_module_for_test();
         let stage = 1;
         add_deployer_script(publisher, signer::address_of(deployer));
+        set_init_stage(deployer, 1);
         let scores = vector::empty<u64>();
         let addrs = vector::empty<address>();
         let idx = 0;
@@ -618,13 +599,14 @@ module vip_score::vip_score {
 
     }
 
-    #[test(non_deployer = @0x3)]
+    #[test(deployer = @0x2, non_deployer = @0x3)]
     #[expected_failure(abort_code = 0x10001, location = Self)]
     fun failed_update_score_script_by_non_deployer(
-        non_deployer: &signer
+        deployer: &signer, non_deployer: &signer
     ) acquires ModuleStore {
         init_module_for_test();
         let stage = 1;
+        set_init_stage(deployer, stage);
         let scores = vector::empty<u64>();
         let addrs = vector::empty<address>();
         let idx = 0;
@@ -637,7 +619,7 @@ module vip_score::vip_score {
     }
 
     #[test(publisher = @0x2, deployer = @0x2)]
-    #[expected_failure(abort_code = 0x10009, location = Self)]
+    #[expected_failure(abort_code = 0x10003, location = Self)]
     fun failed_finalize_script_by_skip_finalize_previous_stage(
         publisher: &signer, deployer: &signer
     ) acquires ModuleStore {

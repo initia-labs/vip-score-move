@@ -4,9 +4,9 @@
 
 All entry functions can only be executed by addresses that are in `ModuleStore.deployers`.
 
-### `prepare_stage`
+### `set_init_stage`
 
-Set Initial Stage
+Set initial stage
 
 ```rust
 public entry fun set_init_stage(deployer: &signer, stage: u64)
@@ -56,14 +56,6 @@ public entry fun remove_deployer_script(
 ## Public Functions
 
 All public functions can only be executed by addresses that are in `ModuleStore.deployers`.
-
-### `prepare_stage`
-
-Create a stage score table if not exists.
-
-```rust
-public fun prepare_stage(deployer: &signer, stage: u64)
-```
 
 ### `increase_score`
 
