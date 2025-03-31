@@ -55,12 +55,11 @@ module vip_score::vip_score {
     /// The stage is already finalized.
     const EFINALIZED_STAGE: u64 = 8;
 
-
     // Can not set initial stage to 0;
-    const ESTAGE_ZERO: u64 = 10;
+    const ESTAGE_ZERO: u64 = 9;
 
     // Already called set_init_stage;
-    const EALREADY_SET: u64 = 11;
+    const EALREADY_SET: u64 = 10;
     //
     // Events
     //
@@ -151,7 +150,6 @@ module vip_score::vip_score {
         stage: u64,
         amount: u64
     ) {
-
         let score = table::borrow_mut_with_default(&mut scores.score, account, 0);
 
         scores.total_score = scores.total_score - *score + amount;
