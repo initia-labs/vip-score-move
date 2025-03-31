@@ -55,8 +55,6 @@ module vip_score::vip_score {
     /// The stage is already finalized.
     const EFINALIZED_STAGE: u64 = 8;
 
-    // The previous stage is not finalized.
-    const EPREVIOUS_STAGE_NOT_FINALIZED: u64 = 9;
 
     // Can not set initial stage to 0;
     const ESTAGE_ZERO: u64 = 10;
@@ -112,6 +110,21 @@ module vip_score::vip_score {
         assert!(module_store.init_stage == 0, error::already_exists(EALREADY_SET));
         module_store.init_stage = stage;
         create_stage(stage);
+    }
+
+        // Check deployer permission and create a stage score table if not exists.
+    fun create_stage(stage: u64) acquires ModuleStore {
+        let module_store = borrow_global_mut<ModuleStore>(@vip_score);
+    
+        table::add(
+            &mut module_store.scores,
+            stage,
+            Scores {
+                total_score: 0,
+                is_finalized: false,
+                score: table::new<address, u64>()
+            }
+        );
     }
 
     /// Check signer's permisson
@@ -233,20 +246,6 @@ module vip_score::vip_score {
     //
     // Public functions
     //
-    // Check deployer permission and create a stage score table if not exists.
-    fun create_stage(stage: u64) acquires ModuleStore {
-        let module_store = borrow_global_mut<ModuleStore>(@vip_score);
-    
-        table::add(
-            &mut module_store.scores,
-            stage,
-            Scores {
-                total_score: 0,
-                is_finalized: false,
-                score: table::new<address, u64>()
-            }
-        );
-    }
 
     /// Increase a score of an account.
     public fun increase_score(
