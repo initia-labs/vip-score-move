@@ -1,0 +1,13 @@
+[package]
+name = "vip-score"
+version = "0.0.1"
+
+[addresses]
+std = "0x1"
+vip_score = "_"
+
+[dev-addresses]
+vip_score = "0x2"
+
+[dependencies]
+MinitiaStdlib = { git = "https://github.com/initia-labs/move-natives.git", subdir = "minitia_stdlib", rev = "main" }
